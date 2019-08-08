@@ -1,7 +1,7 @@
-(defproject arctype/service.sqlite "0.1.0-SNAPSHOT"
+(defproject arctype/service.sqlite "0.1.1"
   :dependencies 
-  [[org.clojure/clojure "1.8.0"]
-   [org.clojure/core.async "0.4.474"]
-   [arctype/service "0.1.0-SNAPSHOT"]
-   [org.xerial/sqlite-jdbc "3.23.1"]
-   [hikari-cp "2.5.0"]])
+  [[org.clojure/clojure "1.10.0"]
+   [org.clojure/core.async "0.4.500"]
+   [arctype/service "1.0.4"]
+   [org.xerial/sqlite-jdbc "3.28.0"]
+   [hikari-cp "2.8.0"]])
