@@ -18,7 +18,9 @@
   [spec]
   (cond-> spec
     (some? (:connection-uri spec)) (-> (assoc :jdbc-url (:connection-uri spec))
-                                       (dissoc :connection-uri))))
+                                       (dissoc :connection-uri))
+    ; Default to a single connection for SQLite
+    (nil? (:maximum-pool-size spec)) (assoc :maximum-pool-size 1)))
 
 (defn- connect
   "Open a jdbc connection pool"
