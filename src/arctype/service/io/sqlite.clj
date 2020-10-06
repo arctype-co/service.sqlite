@@ -4,7 +4,6 @@
     [clojure.core.async :as async]
     [clojure.java.jdbc :as jdbc]
     [clojure.tools.logging :as log]
-    [hikari-cp.core :as hikari-cp]
     [schema.core :as S]
     [sundbry.resource :as resource :refer [with-resources]]
     [arctype.service.protocol :refer :all])
@@ -14,27 +13,19 @@
 (def Config
   {:db-spec {S/Keyword S/Any}})
 
-(defn- xform-db-spec
-  [spec]
-  (cond-> spec
-    (some? (:connection-uri spec)) (-> (assoc :jdbc-url (:connection-uri spec))
-                                       (dissoc :connection-uri))
-    ; Default to a single connection for SQLite
-    (nil? (:maximum-pool-size spec)) (assoc :maximum-pool-size 1)))
-
 (defn- connect
   "Open a jdbc connection pool"
   [config]
-  (let [db-spec (xform-db-spec (:db-spec config))]
-    (log/debug {:message "Opening Hikari connection pool to SQLite"
+  (let [db-spec (:db-spec config)]
+    (log/debug {:message "Opening connection to SQLite"
                 :db-spec db-spec})
-    (hikari-cp/make-datasource db-spec)))
+    (jdbc/get-connection db-spec)))
 
 (defn- disconnect
   "Release a jdbc connection pool"
   [db]
-  (log/debug {:message "Closing Hikari connection pool to SQLite"})
-  (hikari-cp/close-datasource db)
+  (log/debug {:message "Closing connection to SQLite"})
+  (.close db)
   nil)
 
 (defn health-check!
@@ -57,21 +48,21 @@
   [results]
   (second (ffirst results)))
 
-(defrecord SQLiteClient [config datasource]
+(defrecord SQLiteClient [config connection]
   PLifecycle
   (start [this]
     (log/info "Starting SQLite client")
     (-> this
-        (assoc :datasource (connect config))))
+        (assoc :connection (connect config))))
 
   (stop [this]
     (log/info "Stopping SQLite client")
     (-> this
-        (update :datasource disconnect)))
+        (update :connection disconnect)))
 
   PJdbcConnection
   (conn [this] 
-    {:datasource datasource}))
+    {:connection connection}))
 
 (S/defn create
   [resource-name config :- Config]
