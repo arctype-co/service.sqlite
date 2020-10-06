@@ -1,6 +1,5 @@
-(ns arctype.service.io.sqlite
+(ns arctype.service.sqlite
   (:require
-    [cheshire.core :as json]
     [clojure.core.async :as async]
     [clojure.java.jdbc :as jdbc]
     [clojure.tools.logging :as log]

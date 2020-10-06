@@ -3,5 +3,11 @@
   [[org.clojure/clojure "1.10.0"]
    [org.clojure/core.async "0.4.500"]
    [org.clojure/java.jdbc "0.7.11"]
-   [arctype/service "1.0.4"]
-   [org.xerial/sqlite-jdbc "3.28.0"]])
+   [arctype/service "1.1.0-SNAPSHOT"]
+   [org.xerial/sqlite-jdbc "3.28.0"]]
+  
+  :profiles
+  {:dev
+   {:resource-paths ["test"]
+    :dependencies
+    [[org.apache.logging.log4j/log4j-core "2.13.2"]]}})
