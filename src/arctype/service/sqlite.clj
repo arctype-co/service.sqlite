@@ -42,6 +42,14 @@
                                  (.getMessage inner#))}))
        (throw e#))))
 
+(defmacro with-locking-tx
+  [[tx db] & body]
+  (let [fn-bindings [tx]]
+  `(locking ~db
+     (try-sql 
+       (jdbc/db-transaction* ~db
+                    (^{:once true} fn* ~fn-bindings ~@body))))))
+
 (defn first-val
   "Get the first column of the first row"
   [results]

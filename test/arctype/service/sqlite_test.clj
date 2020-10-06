@@ -71,13 +71,9 @@
 (defn event-thread-runner
   [db]
   (fn []
-    (let [cxn (conn db)]
-      #_(dotimes [n 500]
-        (insert-event! cxn))
-      (dotimes [n 1000]
-        (locking db
-          (jdbc/with-db-transaction [tx cxn]
-            (insert-event! tx)))))))
+    (dotimes [n 1000]
+      (sqlite/with-locking-tx [tx db]
+        (insert-event! tx)))))
 
 (deftest test-concurrency
   (log/info "Test concurrent ops")
