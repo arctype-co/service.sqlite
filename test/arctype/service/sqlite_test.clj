@@ -44,11 +44,19 @@
 
 (use-fixtures :each with-system)
 
-(deftest test-basic-ops
+(deftest test-suite
   (log/info "Test basic ops")
-  (let [cxn (conn *db*)]
-    (is (some? cxn))
-    (jdbc/execute! cxn "create table generals (name varchar(255) primary key, dob integer);")
-    (is (empty? (jdbc/query cxn ["select * from generals"])))
-    (jdbc/execute! cxn "insert into generals values ('George Washington', 1732);")
-    (is (= 1 (count (jdbc/query cxn ["select * from generals"]))))))
+  (testing "Basic operations"
+    (let [cxn (conn *db*)]
+      (is (some? cxn))
+      (jdbc/execute! cxn "create table generals (name varchar(255) primary key, state varchar(255), dob integer);")
+      (is (empty? (jdbc/query cxn ["select * from generals"])))
+      (jdbc/execute! cxn "insert into generals values ('George Washington', 'Virginia', 1732);")
+      (is (= 1 (count (jdbc/query cxn ["select * from generals"]))))))
+  (testing "Transactions"
+    (let [cxn (conn *db*)]
+      (jdbc/with-db-transaction [tx cxn]
+        (jdbc/execute! tx "insert into generals values ('George Patton', 'California', 1885);") 
+        (is (= 2 (count (jdbc/query cxn ["select * from generals"])))))
+      (jdbc/with-db-transaction [tx cxn]
+        (is (= 2 (count (jdbc/query cxn ["select * from generals"]))))))))
