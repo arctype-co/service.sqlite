@@ -13,7 +13,8 @@
 
 (def ^:private test-config
   {:db-spec
-   {:connection-uri "jdbc:sqlite:test.db"}})
+   {:connection-uri "jdbc:sqlite:test.db"
+    :auto-commit? false}})
 
 (defn- new-system
   []
@@ -44,7 +45,7 @@
 
 (use-fixtures :each with-system)
 
-(deftest test-suite
+(deftest test-basics
   (log/info "Test basic ops")
   (testing "Basic operations"
     (let [cxn (conn *db*)]
@@ -60,3 +61,37 @@
         (is (= 2 (count (jdbc/query cxn ["select * from generals"])))))
       (jdbc/with-db-transaction [tx cxn]
         (is (= 2 (count (jdbc/query cxn ["select * from generals"]))))))))
+
+(defn- insert-event!
+  [tx]
+  (let [ts (System/nanoTime)
+        data (str "{ timestamp: " ts " }")]
+    (jdbc/execute! tx ["insert into events values(?, ?)" data ts])))
+
+(defn event-thread-runner
+  [db]
+  (fn []
+    (let [cxn (conn db)]
+      #_(dotimes [n 500]
+        (insert-event! cxn))
+      (dotimes [n 1000]
+        (locking db
+          (jdbc/with-db-transaction [tx cxn]
+            (insert-event! tx)))))))
+
+(deftest test-concurrency
+  (log/info "Test concurrent ops")
+  (let [cxn (conn *db*)]
+    (is (some? cxn))
+    (jdbc/execute! cxn "create table events (data text, timestamp integer);")
+    (is (empty? (jdbc/query cxn ["select * from events"])))
+    (insert-event! cxn)
+    (is (= 1 (first (vals (first (jdbc/query cxn ["select count(*) from events"])))))))
+  (let [threads (repeatedly 8 #(Thread. (event-thread-runner *db*)))
+        cxn (conn *db*)]
+    (doseq [thread threads]
+      (.start thread))
+    (doseq [thread threads]
+      (.join thread))
+    (jdbc/with-db-transaction [tx cxn]
+      (is (= 8001 (first (vals (first (jdbc/query cxn ["select count(*) from events"])))))))))
