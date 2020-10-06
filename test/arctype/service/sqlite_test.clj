@@ -73,7 +73,9 @@
   (fn []
     (dotimes [n 1000]
       (sqlite/with-locking-tx [tx db]
-        (insert-event! tx)))))
+        (insert-event! tx))
+      ; attempt read without a tx/lock
+      (jdbc/query (conn db) ["SELECT * from events where 1 = 0"]))))
 
 (deftest test-concurrency
   (log/info "Test concurrent ops")
