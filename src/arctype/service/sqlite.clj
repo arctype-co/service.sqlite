@@ -12,26 +12,24 @@
 (def Config
   {:db-spec {S/Keyword S/Any}})
 
+(defrecord Connection [connection]
+  
+  java.io.Closeable
+  (close [this]
+    (log/debug {:message "Closing connection to SQLite"})
+    (.close connection)
+    nil))
+
 (defn- connect
-  "Open a jdbc connection pool"
-  [config]
+  "Open a jdbc connection"
+  [{:keys [config]}]
   (let [db-spec (:db-spec config)]
     (log/debug {:message "Opening connection to SQLite"
                 :db-spec db-spec})
-    (jdbc/get-connection db-spec)))
-
-(defn- disconnect
-  "Release a jdbc connection pool"
-  [db]
-  (log/debug {:message "Closing connection to SQLite"})
-  (.close db)
-  nil)
-
-(defn health-check!
-  [this]
-  (jdbc/query (conn this) ["SELECT version()"]))
+    (->Connection (jdbc/get-connection db-spec))))
 
 (defmacro try-sql
+  "Macro to log inner sql exceptions for better debugging"
   [& body]
   `(try 
      (do ~@body)
@@ -42,34 +40,54 @@
                                  (.getMessage inner#))}))
        (throw e#))))
 
+(defn with-locking-tx*
+  [{:keys [connection-state] :as this} tx-fn]
+  (locking (:lock this)
+    (let [cxn (or @connection-state (reset! connection-state (connect this)))]
+      (try 
+        (jdbc/db-transaction* cxn tx-fn)
+        (catch SQLException e
+          (let [inner (.getNextException e)]
+            (log/error e {:message "SQL exception"
+                          :cause (when (some? inner) (.getMessage inner))}))
+          ; disconnect on error
+          (swap! connection-state #(.close %))
+          (throw e))))))
+
 (defmacro with-locking-tx
-  [[tx db] & body]
+  [[tx this] & body]
   (let [fn-bindings [tx]]
-  `(locking ~db
-     (try-sql 
-       (jdbc/db-transaction* ~db
-                    (^{:once true} fn* ~fn-bindings ~@body))))))
+    `(with-locking-tx* ~this (^{:once true} fn* ~fn-bindings ~@body))))
+
+(defn health-check!
+  [this]
+  (with-locking-tx [tx this]
+    (jdbc/query tx ["SELECT version()"])))
 
 (defn first-val
   "Get the first column of the first row"
   [results]
   (second (ffirst results)))
 
-(defrecord SQLiteClient [config connection]
+(defrecord SQLiteClient [config connection-state lock]
   PLifecycle
   (start [this]
-    (log/info "Starting SQLite client")
-    (-> this
-        (assoc :connection (connect config))))
+    (as-> this this
+        (assoc this :lock (Object.))
+        (assoc this :connection-state (atom nil))
+        (with-locking-tx [tx this]
+          (let [version (first-val (jdbc/query tx ["SELECT sqlite_version() as version"]))]
+            (log/info "Opened SQLite database with version:" version))
+          this)))
 
   (stop [this]
     (log/info "Stopping SQLite client")
     (-> this
-        (update :connection disconnect)))
+        (dissoc :connection-state)
+        (dissoc :lock)))
 
   PJdbcConnection
-  (conn [this] 
-    {:connection connection}))
+  (conn [this] (connect this)))
 
 (S/defn create
   [resource-name config :- Config]
